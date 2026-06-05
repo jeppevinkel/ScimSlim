@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <PackageId>ScimSlim</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>jeppevinkel</Authors>
+    <Description>Lightweight SCIM 2.0 server middleware for ASP.NET Core, designed for Authentik-backed homelab applications. MIT licensed, no enterprise nonsense.</Description>
+    <PackageTags>scim;authentik;homelab;aspnetcore;identity;provisioning</PackageTags>
+    <PackageProjectUrl>https://github.com/jeppevinkel/ScimSlim</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/jeppevinkel/ScimSlim</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.*" />
+  </ItemGroup>
+
+</Project>
