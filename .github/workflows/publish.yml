@@ -39,19 +39,22 @@ jobs:
             /p:Version=${{ steps.version.outputs.VERSION }} -o ./nupkgs
 
       - name: Push to NuGet.org
-        run: dotnet nuget push ./nupkgs/*.nupkg \
+        run: |
+          dotnet nuget push "./nupkgs/*.nupkg" \
              --api-key ${{ secrets.NUGET_API_KEY }} \
              --source https://api.nuget.org/v3/index.json \
              --skip-duplicate
 
       - name: Push symbols to NuGet.org
-        run: dotnet nuget push ./nupkgs/*.snupkg \
+        run: |
+          dotnet nuget push "./nupkgs/*.snupkg" \
              --api-key ${{ secrets.NUGET_API_KEY }} \
              --source https://api.nuget.org/v3/index.json \
              --skip-duplicate
 
       - name: Push to GitHub Packages
-        run: dotnet nuget push ./nupkgs/*.nupkg \
+        run: |
+          dotnet nuget push "./nupkgs/*.nupkg" \
              --api-key ${{ secrets.GITHUB_TOKEN }} \
              --source https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json \
              --skip-duplicate
