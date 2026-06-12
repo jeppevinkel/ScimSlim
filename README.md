@@ -1,5 +1,8 @@
 # ScimSlim
 
+[![NuGet Version](https://img.shields.io/nuget/v/ScimSlim?style=flat&logo=nuget&label=ScimSlim)](https://www.nuget.org/packages/ScimSlim)
+[![NuGet Version](https://img.shields.io/nuget/v/ScimSlim.EntityFramework?style=flat&logo=nuget&label=ScimSlim.EntityFramework)](https://www.nuget.org/packages/ScimSlim.EntityFramework)
+
 Lightweight **SCIM 2.0 server** middleware for ASP.NET Core 10+, built for use with
 [Authentik](https://goauthentik.io/) in homelab environments. MIT licensed.
 
