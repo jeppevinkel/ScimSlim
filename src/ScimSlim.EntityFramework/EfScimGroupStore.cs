@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ScimSlim.Abstractions;
 using ScimSlim.EntityFramework.Entities;
 using ScimSlim.Filtering;
@@ -11,7 +12,7 @@ namespace ScimSlim.EntityFramework;
 /// EF Core-backed <see cref="IScimGroupStore"/> operating on
 /// <see cref="ScimGroupEntity"/> rows in an <see cref="IScimDbContext"/>.
 /// </summary>
-public class EfScimGroupStore(IScimDbContext db) : IScimGroupStore
+public class EfScimGroupStore(IScimDbContext db, ILogger<EfScimGroupStore> logger) : IScimGroupStore
 {
     public async Task<ScimGroup?> GetByIdAsync(string id)
     {
@@ -30,15 +31,23 @@ public class EfScimGroupStore(IScimDbContext db) : IScimGroupStore
     {
         var query = Query();
 
-        if (ScimFilter.TryParse(filter, out var parsed) && parsed.Value.Operator == "eq")
+        if (!string.IsNullOrEmpty(filter))
         {
-            var value = parsed.Value.Value;
-            query = parsed.Value.Attribute.ToLowerInvariant() switch
+            if (ScimFilter.TryParse(filter, out var parsed) && parsed.Value.Operator == "eq")
             {
-                "displayname" => query.Where(g => g.DisplayName == value),
-                "externalid" => query.Where(g => g.ExternalId == value),
-                _ => query,
-            };
+                var value = parsed.Value.Value;
+                query = parsed.Value.Attribute.ToLowerInvariant() switch
+                {
+                    "displayname" => query.Where(g => g.DisplayName == value),
+                    "externalid" => query.Where(g => g.ExternalId == value),
+                    _ => query.Where(_ => false),
+                };
+            }
+            else
+            {
+                logger.LogWarning("Unsupported SCIM filter ignored (matched nothing): {Filter}", filter);
+                query = query.Where(_ => false);
+            }
         }
 
         var total = await query.CountAsync();
@@ -73,8 +82,11 @@ public class EfScimGroupStore(IScimDbContext db) : IScimGroupStore
             ?? throw new KeyNotFoundException($"Group '{id}' not found.");
 
         entity.ApplyFrom(group);
-        entity.LastModified = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
+        if (db.ChangeTracker.HasChanges())
+        {
+            entity.LastModified = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
         return entity.ToScim();
     }
 
@@ -86,8 +98,11 @@ public class EfScimGroupStore(IScimDbContext db) : IScimGroupStore
         var group = entity.ToScim();
         ScimPatch.Apply(group, patch);
         entity.ApplyFrom(group);
-        entity.LastModified = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
+        if (db.ChangeTracker.HasChanges())
+        {
+            entity.LastModified = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task DeleteAsync(string id)
