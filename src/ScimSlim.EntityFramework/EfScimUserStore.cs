@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ScimSlim.Abstractions;
 using ScimSlim.EntityFramework.Entities;
 using ScimSlim.Filtering;
@@ -11,7 +12,7 @@ namespace ScimSlim.EntityFramework;
 /// EF Core-backed <see cref="IScimUserStore"/> operating on
 /// <see cref="ScimUserEntity"/> rows in an <see cref="IScimDbContext"/>.
 /// </summary>
-public class EfScimUserStore(IScimDbContext db) : IScimUserStore
+public class EfScimUserStore(IScimDbContext db, ILogger<EfScimUserStore> logger) : IScimUserStore
 {
     public async Task<ScimUser?> GetByIdAsync(string id)
     {
@@ -36,15 +37,23 @@ public class EfScimUserStore(IScimDbContext db) : IScimUserStore
     {
         var query = Query();
 
-        if (ScimFilter.TryParse(filter, out var parsed) && parsed.Value.Operator == "eq")
+        if (!string.IsNullOrEmpty(filter))
         {
-            var value = parsed.Value.Value;
-            query = parsed.Value.Attribute.ToLowerInvariant() switch
+            if (ScimFilter.TryParse(filter, out var parsed) && parsed.Value.Operator == "eq")
             {
-                "username" => query.Where(u => u.UserName == value),
-                "externalid" => query.Where(u => u.ExternalId == value),
-                _ => query,
-            };
+                var value = parsed.Value.Value;
+                query = parsed.Value.Attribute.ToLowerInvariant() switch
+                {
+                    "username" => query.Where(u => u.UserName == value),
+                    "externalid" => query.Where(u => u.ExternalId == value),
+                    _ => query.Where(_ => false),
+                };
+            }
+            else
+            {
+                logger.LogWarning("Unsupported SCIM filter ignored (matched nothing): {Filter}", filter);
+                query = query.Where(_ => false);
+            }
         }
 
         var total = await query.CountAsync();
@@ -79,8 +88,11 @@ public class EfScimUserStore(IScimDbContext db) : IScimUserStore
             ?? throw new KeyNotFoundException($"User '{id}' not found.");
 
         entity.ApplyFrom(user);
-        entity.LastModified = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
+        if (db.ChangeTracker.HasChanges())
+        {
+            entity.LastModified = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
         return entity.ToScim();
     }
 
@@ -92,8 +104,11 @@ public class EfScimUserStore(IScimDbContext db) : IScimUserStore
         var user = entity.ToScim();
         ScimPatch.Apply(user, patch);
         entity.ApplyFrom(user);
-        entity.LastModified = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
+        if (db.ChangeTracker.HasChanges())
+        {
+            entity.LastModified = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task DeleteAsync(string id)

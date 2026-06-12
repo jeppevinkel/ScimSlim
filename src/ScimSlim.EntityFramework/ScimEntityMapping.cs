@@ -40,7 +40,8 @@ internal static class ScimEntityMapping
         },
     };
 
-    /// <summary>Copies SCIM user values onto an entity (preserves <c>Id</c>/timestamps).</summary>
+    /// <summary>Copies SCIM user values onto an entity (preserves <c>Id</c>/timestamps).
+    /// Emails are diffed by <c>Value</c> so unchanged mail addresses are left untouched.</summary>
     public static void ApplyFrom(this ScimUserEntity e, ScimUser user)
     {
         e.ExternalId = user.ExternalId;
@@ -51,20 +52,35 @@ internal static class ScimEntityMapping
         e.GivenName = user.Name?.GivenName;
         e.FamilyName = user.Name?.FamilyName;
         e.Formatted = user.Name?.Formatted;
+        
+        var incoming = (user.Emails ?? [])
+            .Where(m => !string.IsNullOrEmpty(m.Value))
+            .DistinctBy(m => m.Value)
+            .ToDictionary(m => m.Value);
 
-        e.Emails.Clear();
-        if (user.Emails is not null)
+        // 1. Remove emails no longer present (and dedupe any pre-existing duplicates).
+        var seen = new HashSet<string>();
+        e.Emails.RemoveAll(m => !incoming.ContainsKey(m.Value) || !seen.Add(m.Value));
+        
+        // 2. Update survivors in place; strip them from the incoming set.
+        foreach (var email in e.Emails)
         {
-            foreach (var email in user.Emails)
+            var inc = incoming[email.Value];
+            email.Type = inc.Type;
+            email.Primary = inc.Primary;
+            incoming.Remove(email.Value);
+        }
+        
+        // 3. Whatever remains is genuinely new.
+        foreach (var inc in incoming.Values)
+        {
+            e.Emails.Add(new ScimEmailEntity()
             {
-                e.Emails.Add(new ScimEmailEntity
-                {
-                    UserId = e.Id,
-                    Value = email.Value,
-                    Type = email.Type,
-                    Primary = email.Primary,
-                });
-            }
+                UserId = e.Id,
+                Value = inc.Value,
+                Type = inc.Type,
+                Primary = inc.Primary,
+            });
         }
     }
 
@@ -88,24 +104,39 @@ internal static class ScimEntityMapping
         },
     };
 
-    /// <summary>Copies SCIM group values onto an entity (preserves <c>Id</c>/timestamps).</summary>
+    /// <summary>Copies SCIM group values onto an entity (preserves <c>Id</c>/timestamps).
+    /// Members are diffed by <c>Value</c> so unchanged memberships are left untouched.</summary>
     public static void ApplyFrom(this ScimGroupEntity e, ScimGroup group)
     {
         e.ExternalId = group.ExternalId;
         e.DisplayName = group.DisplayName;
+        
+        var incoming = (group.Members ?? [])
+            .Where(m => !string.IsNullOrEmpty(m.Value))
+            .DistinctBy(m => m.Value)
+            .ToDictionary(m => m.Value);
 
-        e.Members.Clear();
-        if (group.Members is not null)
+        // 1. Remove members no longer present (and dedupe any pre-existing duplicates).
+        var seen = new HashSet<string>();
+        e.Members.RemoveAll(m => !incoming.ContainsKey(m.Value) || !seen.Add(m.Value));
+        
+        // 2. Update survivors in place; strip them from the incoming set.
+        foreach (var member in e.Members)
         {
-            foreach (var member in group.Members)
+            var inc = incoming[member.Value];
+            member.Display = inc.Display;
+            incoming.Remove(member.Value);
+        }
+        
+        // 3. Whatever remains is genuinely new.
+        foreach (var inc in incoming.Values)
+        {
+            e.Members.Add(new ScimGroupMemberEntity
             {
-                e.Members.Add(new ScimGroupMemberEntity
-                {
-                    GroupId = e.Id,
-                    Value = member.Value,
-                    Display = member.Display,
-                });
-            }
+                GroupId = e.Id,
+                Value = inc.Value,
+                Display = inc.Display,
+            });
         }
     }
 }

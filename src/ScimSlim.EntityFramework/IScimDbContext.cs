@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using ScimSlim.EntityFramework.Entities;
 
 namespace ScimSlim.EntityFramework;
@@ -12,5 +13,6 @@ public interface IScimDbContext
     DbSet<ScimUserEntity> ScimUsers { get; }
     DbSet<ScimGroupEntity> ScimGroups { get; }
 
+    ChangeTracker ChangeTracker { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

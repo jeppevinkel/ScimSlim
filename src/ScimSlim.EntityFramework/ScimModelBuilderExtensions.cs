@@ -34,7 +34,11 @@ public static class ScimModelBuilderExtensions
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<ScimGroupMemberEntity>(b => b.HasKey(m => m.Id));
+        modelBuilder.Entity<ScimGroupMemberEntity>(b =>
+        {
+            b.HasKey(m => m.Id);
+            b.HasIndex(m => new { m.Value, m.GroupId }).IsUnique();
+        });
 
         return modelBuilder;
     }
