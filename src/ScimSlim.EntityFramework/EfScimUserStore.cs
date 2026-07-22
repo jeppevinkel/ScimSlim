@@ -12,8 +12,14 @@ namespace ScimSlim.EntityFramework;
 /// EF Core-backed <see cref="IScimUserStore"/> operating on
 /// <see cref="ScimUserEntity"/> rows in an <see cref="IScimDbContext"/>.
 /// </summary>
-public class EfScimUserStore(IScimDbContext db, ILogger<EfScimUserStore> logger) : IScimUserStore
+public class EfScimUserStore(
+    IScimDbContext db,
+    ILogger<EfScimUserStore> logger,
+    EfScimStoreOptions? options = null)
+    : IScimUserStore
 {
+    private readonly EfScimStoreOptions _options = options ?? new EfScimStoreOptions();
+
     public async Task<ScimUser?> GetByIdAsync(string id)
     {
         var entity = await Query().FirstOrDefaultAsync(u => u.Id == id);
@@ -69,15 +75,29 @@ public class EfScimUserStore(IScimDbContext db, ILogger<EfScimUserStore> logger)
 
     public async Task<ScimUser> CreateAsync(ScimUser user)
     {
-        var entity = new ScimUserEntity
+        // A soft-deleted user that gets reprovisioned with the same ID from an external IDP is resurrected.
+        var resurrected = await db.ScimUsers
+            .Include(u => u.Emails)
+            .FirstOrDefaultAsync(u => u.IsDeleted && !string.IsNullOrEmpty(user.Id) && u.Id == user.Id);
+
+        var entity = resurrected ?? new ScimUserEntity
         {
             Id = string.IsNullOrEmpty(user.Id) ? Guid.NewGuid().ToString() : user.Id,
             Created = DateTimeOffset.UtcNow,
-            LastModified = DateTimeOffset.UtcNow,
         };
-        entity.ApplyFrom(user);
 
-        db.ScimUsers.Add(entity);
+        if (resurrected is not null)
+        {
+            resurrected.IsDeleted = false;
+            resurrected.DeletedAt = null;
+        }
+        else
+        {
+            db.ScimUsers.Add(entity);
+        }
+
+        entity.ApplyFrom(user);
+        entity.LastModified = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync();
         return entity.ToScim();
     }
@@ -85,7 +105,7 @@ public class EfScimUserStore(IScimDbContext db, ILogger<EfScimUserStore> logger)
     public async Task<ScimUser> UpdateAsync(string id, ScimUser user)
     {
         var entity = await Query().FirstOrDefaultAsync(u => u.Id == id)
-            ?? throw new KeyNotFoundException($"User '{id}' not found.");
+                     ?? throw new KeyNotFoundException($"User '{id}' not found.");
 
         entity.ApplyFrom(user);
         if (db.ChangeTracker.HasChanges())
@@ -93,13 +113,14 @@ public class EfScimUserStore(IScimDbContext db, ILogger<EfScimUserStore> logger)
             entity.LastModified = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync();
         }
+
         return entity.ToScim();
     }
 
     public async Task ApplyPatchAsync(string id, ScimPatchRequest patch)
     {
         var entity = await Query().FirstOrDefaultAsync(u => u.Id == id)
-            ?? throw new KeyNotFoundException($"User '{id}' not found.");
+                     ?? throw new KeyNotFoundException($"User '{id}' not found.");
 
         var user = entity.ToScim();
         ScimPatch.Apply(user, patch);
@@ -113,15 +134,29 @@ public class EfScimUserStore(IScimDbContext db, ILogger<EfScimUserStore> logger)
 
     public async Task DeleteAsync(string id)
     {
-        var entity = await db.ScimUsers.FirstOrDefaultAsync(u => u.Id == id);
+        var entity = await db.ScimUsers.FirstOrDefaultAsync(u =>
+            u.Id == id && (!_options.SoftDeleteUsers || !u.IsDeleted));
         if (entity is null)
         {
             return;
         }
 
-        db.ScimUsers.Remove(entity);
+        if (_options.SoftDeleteUsers)
+        {
+            entity.IsDeleted = true;
+            entity.DeletedAt = DateTimeOffset.UtcNow;
+            entity.LastModified = entity.DeletedAt.Value;
+        }
+        else
+        {
+            db.ScimUsers.Remove(entity);
+        }
+
         await db.SaveChangesAsync();
     }
 
-    private IQueryable<ScimUserEntity> Query() => db.ScimUsers.Include(u => u.Emails);
+    // Always hides soft-deleted rows, regardless of the current SoftDeleteUsers setting:
+    // a user's delete state must not flip back to "active" just because the option changed.
+    private IQueryable<ScimUserEntity> Query() =>
+        db.ScimUsers.Include(u => u.Emails).Where(u => !u.IsDeleted);
 }

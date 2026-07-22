@@ -12,6 +12,8 @@ public class ScimUserEntity
     public string? DisplayName { get; set; }
     public string? Locale { get; set; }
     public bool Active { get; set; } = true;
+    public bool IsDeleted { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
 
     public string? GivenName { get; set; }
     public string? FamilyName { get; set; }
