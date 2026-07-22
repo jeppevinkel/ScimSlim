@@ -117,6 +117,37 @@ builder.Services.AddScim<EfScimUserStore, EfScimGroupStore>(opts =>
 builder.Services.AddScimEntityFrameworkStores<AppDbContext>();
 ```
 
+### Soft-deleting users
+
+`AddScimEntityFrameworkStores` takes an optional `EfScimStoreOptions` configure delegate:
+
+```csharp
+builder.Services.AddScimEntityFrameworkStores<AppDbContext>(opts =>
+{
+    opts.SoftDeleteUsers = true; // default
+});
+```
+
+- `SoftDeleteUsers = true` (the default): a SCIM `DELETE` flags the `ScimUserEntity` row
+  (`IsDeleted`, `DeletedAt`) instead of removing it. Deleted users are excluded from every
+  read (`GET`, `PUT`, `PATCH`, list) as if they didn't exist, so this is transparent to
+  Authentik — it just keeps the row around for your own auditing/history.
+- Since Authentik keeps the same `id` for a user across its lifetime, re-adding a
+  previously-deleted user to a provisioned group causes Authentik to `POST` a `Create`
+  with that same `id`. The EF store detects this and resurrects the existing row (clearing
+  `IsDeleted`/`DeletedAt`) instead of failing on the id/username collision. Resurrection only
+  matches on the SCIM-assigned `id` — never on `userName`, since that's user-chosen and
+  reusable, and matching on it would let a new registration take over a deleted account's
+  history.
+- `SoftDeleteUsers = false` restores plain hard deletion (the previous default) for new
+  `DELETE` calls. Flip it back to `true` at any time without touching existing rows — deleted
+  users stay hidden from reads regardless of the current setting, so toggling the option never
+  resurrects anyone on its own. There's no purge path exposed through the SCIM API itself — the
+  `DELETE` endpoint 404s for a user that's already gone, soft-deleted or not — so cleaning up
+  old soft-deleted rows is a decision you make yourself. `AddScimEntityFrameworkStores` already
+  registers `IScimDbContext`, so your own maintenance code can inject it and remove
+  `ScimUserEntity` rows directly.
+
 ## SCIM endpoints
 
 `MapScim` mounts the minimum set Authentik needs under the given prefix (default `/v2`):
@@ -162,7 +193,7 @@ var localUser = await userStore.GetByExternalIdAsync(externalId);
 
 ## Versioning
 
-`0.x` is initial development — breaking changes happen freely until the API, at which point it graduates to `1.0.0`.
+`0.x` is initial development — breaking changes happen freely until the API stabilizes, at which point it graduates to `1.0.0`.
 
 ## License
 

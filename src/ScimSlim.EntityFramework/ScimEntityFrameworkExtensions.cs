@@ -16,9 +16,14 @@ public static class ScimEntityFrameworkExtensions
     /// (or instead register your context and use this as the store provider).
     /// </summary>
     public static IServiceCollection AddScimEntityFrameworkStores<TContext>(
-        this IServiceCollection services)
+        this IServiceCollection services,
+        Action<EfScimStoreOptions>? configure = null)
         where TContext : DbContext, IScimDbContext
     {
+        var options = new EfScimStoreOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
+
         services.AddScoped<IScimDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<IScimUserStore, EfScimUserStore>();
         services.AddScoped<IScimGroupStore, EfScimGroupStore>();
